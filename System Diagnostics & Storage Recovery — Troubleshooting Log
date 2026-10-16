@@ -1,0 +1,80 @@
+💿 System Diagnostics & Storage Recovery — Troubleshooting Log
+
+    Location: Huaral, Lima, Peru | Date: October 16, 2026
+    Skills demonstrated: Linux system administration · Filesystem repair · Performance optimization · Permission management · Troubleshooting & pattern recognition
+
+📋 Overview
+Resolved multiple storage and boot performance issues on a Linux system, including an unmountable secondary drive, excessive boot delays, and automated maintenance tasks impacting daily usability. Diagnosed root causes, applied targeted fixes, and implemented a sustainable backup strategy — all while documenting the full diagnostic process.
+🔍 Problems Identified
+1. Secondary Drive Not Mounting
+
+    1TB HDD (/dev/sdb) would not mount — filesystem errors detected
+    Initial attempts showed permission/ownership conflicts post-repair
+
+2. Extremely Slow Boot (20–30 minutes daily)
+
+    System felt sluggish for ~30 minutes after every morning startup
+    Disk utilization spiked to 90%+ with minimal actual I/O — drive appeared "stuck waiting"
+    systemd-analyze blame revealed long wait times on:
+        dev-sda3.device (~42s) — main SSD taking too long to become ready
+        systemd-journal-flush.service (~41s) — log writes blocking readiness
+        lvm2-monitor.service (~39s) — volume monitoring delaying startup
+        e2scrub_reap.service (~14s) — filesystem cleanup job running every boot
+    Timeshift configured with Daily + Boot snapshots — creating backups during every startup
+
+3. Filesystem Checks Triggered After Errors
+
+    Previous fsck run had reset mount-count thresholds, risking frequent full scans
+
+🛠️ Solutions Applied
+✅ Drive Recovery & Permissions
+bash
+
+# Repaired ext4 filesystem errors
+fsck /dev/sdb
+
+# Mounted successfully at /mnt/MainD
+# Set user ownership — no more password prompts for regular file operations
+sudo chown -R $USER:$USER /mnt/MainD
+
+    Result: 933.3 GB fully accessible, read/write without repeated authentication prompts
+
+✅ Filesystem Check Tuning
+bash
+
+# Checked current settings
+tune2fs -l /dev/sda3 | grep "Maximum mount count"
+
+# Set sensible thresholds — check every 30 boots OR every 7 days
+sudo tune2fs -c 30 -i 7d /dev/sda3
+
+    Result: No more unnecessary full scans at every startup
+
+✅ Disabled Problematic Services
+bash
+
+# Stopped e2scrub from running every boot
+sudo systemctl disable --now e2scrub_reap.service
+
+✅ Optimized Timeshift Backup Strategy
+
+    ❌ Boot snapshots — disabled entirely
+    ❌ Daily snapshots — replaced with weekly
+    ✅ Weekly snapshots — keep last 3 copies
+    ✅ Created manual baseline snapshot immediately after configuration
+    ✅ Snapshots stored on separate drive from active work files
+
+📊 Before vs. After
+Table
+Metric	Before	After
+Boot-to-ready time	20–30 minutes	~1–2 minutes
+Drive mount status	Unmountable, errors	Fully accessible
+Daily background disk load	90%+ utilization	Normal idle
+Backup strategy	Boot + Daily (heavy)	Weekly + manual
+User permissions on 1TB drive	Password required repeatedly	Full read/write access
+💡 Key Takeaways
+
+    Pattern recognition: High disk utilization with low actual data transfer pointed to maintenance jobs, not hardware failure
+    Timing matters: Backup and cleanup tasks scheduled during startup create cascading delays
+    Recovery ≠ done: Post-filesystem-repair settings often need manual tuning to prevent recurring slowdowns
+    Transparency in troubleshooting: Documenting every diagnostic step makes future problems faster to resolve
